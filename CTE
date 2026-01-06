@@ -1,0 +1,36 @@
+-- 使用 CTE 先整理出下週各型號的總需求量
+WITH Weekly_Demand AS (
+    SELECT 
+        Component_ID,
+        SUM(Required_Quantity) AS Total_Required
+    FROM Production_Plan
+    WHERE Plan_Date BETWEEN '2024-06-01' AND '2024-06-07'
+    GROUP BY Component_ID
+),
+
+-- 取得當前庫存與安全水位
+Current_Stock AS (
+    SELECT 
+        Component_ID,
+        Component_Name,
+        Stock_Quantity,
+        Safety_Stock_Level,
+        Supplier_ID
+    FROM Inventory
+)
+
+-- 最後將需求與庫存結合，計算缺口
+SELECT 
+    S.Component_ID,
+    S.Component_Name,
+    S.Stock_Quantity AS Current_Stock,
+    D.Total_Required AS Demand_Next_Week,
+    (S.Stock_Quantity - D.Total_Required) AS Projected_Balance,
+    CASE 
+        WHEN (S.Stock_Quantity - D.Total_Required) < S.Safety_Stock_Level THEN 'Critical: Below Safety Stock'
+        WHEN (S.Stock_Quantity - D.Total_Required) < 0 THEN 'Urgent: Out of Stock'
+        ELSE 'Healthy'
+    END AS Risk_Status
+FROM Current_Stock S
+LEFT JOIN Weekly_Demand D ON S.Component_ID = D.Component_ID
+WHERE (S.Stock_Quantity - D.Total_Required) < S.Safety_Stock_Level; -- 只顯示有風險的零件
